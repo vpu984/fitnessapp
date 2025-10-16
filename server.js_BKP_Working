@@ -1,0 +1,112 @@
+require('dotenv').config();
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const path = require('path');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Health check
+app.get('/ping', (req, res) => res.json({ ok: true }));
+
+// POST /generate - generate plan
+app.post('/generate', async (req, res) => {
+  try {
+    const { name, age, height, weight, medical, duration } = req.body;
+    const months = parseInt(duration) || 1; // default 1 month
+
+    // Prompt for ChatGPT
+    const prompt = `
+You are a professional fitness coach. Generate a ${months}-month personalized strength & conditioning + diet program for the client below.
+Return STRICT JSON ONLY (no extra text). JSON structure:
+
+{
+  "title": string,
+  "frequency": string,
+  "months": [
+    {
+      "month": number,
+      "sessions": [
+        {
+          "week": number,
+          "session": number,
+          "title": string,
+          "exercises": [
+            {"name": string, "sets": number, "reps": string, "notes": string}
+          ]
+        }
+      ]
+    }
+  ],
+  "diet": {
+    "meals": {
+      "morning": string,
+      "breakfast": string,
+      "midMorning": string,
+      "lunch": string,
+      "snack": string,
+      "preWorkout": string,
+      "dinner": string,
+      "beforeBed": string
+    },
+    "guidelines": [string]
+  }
+}
+
+Client details:
+name: ${name}
+age: ${age}
+height_cm: ${height}
+weight_kg: ${weight}
+medical_history: ${medical}
+duration_months: ${months}
+
+Make each client plan unique, practical, beginner-to-intermediate friendly. Include exercises, sets, reps, notes in tables.
+`;
+
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) return res.status(500).json({ error: 'OpenAI API key missing in server.' });
+
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful fitness coach that outputs strict JSON only.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 4000
+      },
+      {
+        headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' }
+      }
+    );
+
+    const assistant = response.data.choices[0].message.content;
+    let plan = null;
+    try {
+      const m = assistant.match(/\{[\s\S]*\}/);
+      plan = m ? JSON.parse(m[0]) : JSON.parse(assistant);
+    } catch (err) {
+      return res.status(200).json({ raw: assistant, parseError: err.toString() });
+    }
+
+    return res.json({ ok: true, plan });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Default route
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
