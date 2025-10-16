@@ -2,6 +2,7 @@
   "name": "vishal-training-world",
   "version": "1.0.0",
   "description": "Vishal The Training World - dynamic client plan generator",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -16,6 +17,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "nodemailer": "^7.0.9",
-    "openai": "^6.3.0"
+    "openai": "^6.3.0",
+    "node-fetch": "^3.3.2"
   }
 }
