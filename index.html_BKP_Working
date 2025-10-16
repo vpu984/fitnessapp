@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vishal The Training World</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:20px auto;padding:20px}
+input,select,button{padding:8px;border-radius:6px;border:1px solid #ddd;font-size:14px;width:100%}
+.card{padding:12px;border-radius:8px;border:1px solid #eee;box-shadow:0 4px 12px rgba(0,0,0,0.03)}
+.actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.download{background:#0b74de;color:#fff;border:none;padding:8px 12px;border-radius:6px}
+table{border-collapse:collapse;width:100%;margin-bottom:10px}
+table,th,td{border:1px solid #ddd;padding:6px;text-align:left}
+pre{white-space:pre-wrap;background:#f7f7f7;padding:10px;border-radius:6px}
+</style>
+</head>
+<body>
+<h1>Vishal The Training World</h1>
+
+<div class="card">
+<h3>Client Input</h3>
+<label>Client Name</label><input id="name" value="Varun Shetty">
+<label>Age</label><input id="age" value="30">
+<label>Height (cm)</label><input id="height" value="175">
+<label>Weight (kg)</label><input id="weight" value="78">
+<label>Medical History</label>
+<select id="medical"><option>No</option><option>Yes</option></select>
+<label>Duration (months)</label>
+<select id="duration">
+<option>1</option>
+<option>3</option>
+<option>6</option>
+<option>12</option>
+</select>
+
+<div class="actions">
+<button onclick="generatePlan()">Generate Plan</button>
+<button class="download" onclick="downloadDoc()">Download Word (.doc)</button>
+</div>
+</div>
+
+<div id="output" class="card" style="display:none">
+<h3>Generated Plan</h3>
+<div id="planHtml"></div>
+<pre id="rawJson" style="display:none"></pre>
+</div>
+
+<script>
+async function generatePlan(){
+  const payload = {
+    name: document.getElementById('name').value,
+    age: document.getElementById('age').value,
+    height: document.getElementById('height').value,
+    weight: document.getElementById('weight').value,
+    medical: document.getElementById('medical').value,
+    duration: document.getElementById('duration').value
+  };
+  document.getElementById('output').style.display='block';
+  document.getElementById('planHtml').innerHTML='Generating...';
+
+  try {
+    const resp = await fetch('/generate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if(!resp.ok){document.getElementById('planHtml').innerText='Error:'+JSON.stringify(data); return;}
+    if(data.parseError || data.raw){
+      document.getElementById('planHtml').innerText='Error parsing JSON, raw output:';
+      document.getElementById('rawJson').style.display='block';
+      document.getElementById('rawJson').textContent=data.raw||JSON.stringify(data.plan,null,2);
+      return;
+    }
+    renderPlan(data.plan,payload);
+  }catch(e){document.getElementById('planHtml').innerText='Request failed:'+e.message;}
+}
+
+function renderPlan(plan,client){
+  const out=[];
+  out.push(`<h2>${plan.title||'Program Overview'} (${client.name})</h2>`);
+  out.push(`<p><strong>Frequency:</strong> ${plan.frequency||''}</p>`);
+  if(plan.months){
+    plan.months.forEach(m=>{
+      out.push(`<h3>Month ${m.month}</h3>`);
+      if(m.sessions){
+        m.sessions.forEach(s=>{
+          out.push(`<h4>Week ${s.week} — Session ${s.session} — ${s.title}</h4>`);
+          if(s.exercises){
+            out.push('<table><tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Notes</th></tr>');
+            s.exercises.forEach(e=>{
+              out.push(`<tr><td>${e.name}</td><td>${e.sets}</td><td>${e.reps}</td><td>${e.notes||''}</td></tr>`);
+            });
+            out.push('</table>');
+          }
+        });
+      }
+    });
+  }
+  if(plan.diet){
+    out.push('<h3>Diet Plan</h3>');
+    for(const [k,v] of Object.entries(plan.diet.meals||{})){
+      out.push(`<p><strong>${k}:</strong> ${v}</p>`);
+    }
+    if(plan.diet.guidelines) out.push('<p><strong>Guidelines:</strong></p><ul>'+plan.diet.guidelines.map(g=>`<li>${g}</li>`).join('')+'</ul>');
+  }
+  document.getElementById('planHtml').innerHTML=out.join('');
+  document.getElementById('rawJson').style.display='none';
+}
+
+function downloadDoc(){
+  const html=document.getElementById('planHtml').innerHTML;
+  if(!html){alert('Generate plan first');return;}
+  const blob=new Blob(['<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'+html+'</body></html>'],{type:'application/msword'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const name=document.getElementById('name').value.replace(/\s+/g,'_')||'Client';
+  a.download=`${name}_Program.doc`;
+  a.click();
+}
+</script>
+</body>
+</html>
